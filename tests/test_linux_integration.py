@@ -48,6 +48,10 @@ class LinuxIntegrationTests(unittest.TestCase):
             raise unittest.SkipTest(f"user {VICTIM} does not exist") from None
         cls.env = collect_environment()
         cls.dir = tempfile.mkdtemp(prefix="why-it-")
+        # mkdtemp gives 0700 root:root, and the subject under test is an unprivileged
+        # user, so it could not even enter the scratch directory — the traversal layer
+        # would (correctly) deny before any test reached the object it meant to check.
+        os.chmod(cls.dir, 0o755)
 
     @classmethod
     def tearDownClass(cls):
