@@ -1,0 +1,23 @@
+# Normalise line endings: this is a Linux tool, so every text file stays LF in the
+# repository and in the working tree, even when it is checked out on Windows.
+*               text=auto eol=lf
+
+# Explicit, so a file added later cannot silently slip through as CRLF
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.py            text eol=lf
+*.toml          text eol=lf
+*.md            text eol=lf
+Dockerfile      text eol=lf
+MANIFEST.in     text eol=lf
+LICENSE         text eol=lf
+.gitignore      text eol=lf
+
+# Binary assets
+*.png           binary
+*.gif           binary
+
+# Generated / vendored
+__pycache__/    export-ignore
+docs/demo.png   -diff

@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a new layer, an operation, or a new `why` subcommand
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The failure you cannot explain today
+      description: Describe the real-world situation, not the implementation. A concrete "I ran X, got Y, and it took me an hour to find Z" is ideal.
+      placeholder: |
+        Our CI jobs fail with "Permission denied" writing to a shared cache on the
+        NFS mount. It turned out to be root_squash on the server, but nothing on the
+        client hinted at that.
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: The command you wish existed
+      placeholder: why denied /mnt/cache/foo --op write
+    validations:
+      required: false
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of change is this?
+      options:
+        - A new check inside `why denied`
+        - A new `why` subcommand (slow, port, disk…)
+        - Output / UX improvement
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How could it be detected from user space?
+      description: Which file, syscall, xattr, ioctl or log would carry the answer? If it cannot be read without root or inside another process, that is a legitimate answer too — say so, and the layer can report it as advisory.
+    validations:
+      required: false
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Project rules
+      options:
+        - label: This can be done read-only (no modifying permissions, labels or files)
+          required: true
+        - label: This does not require a third-party runtime dependency
+          required: true

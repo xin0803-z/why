@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: unit (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Parse every module (no syntax errors on this interpreter)
+        run: python -m compileall -q src
+      - name: Run the unit suite
+        run: python -m unittest discover -s tests -v
+
+  integration:
+    name: integration (${{ matrix.distro.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - { name: ubuntu-24.04, image: ubuntu:24.04, install: "apt-get update && apt-get install -y python3 acl e2fsprogs util-linux" }
+          - { name: debian-12, image: debian:12, install: "apt-get update && apt-get install -y python3 acl e2fsprogs util-linux" }
+          - { name: fedora-41, image: fedora:41, install: "dnf install -y python3 acl e2fsprogs util-linux" }
+          - { name: rocky-9, image: rockylinux:9, install: "dnf install -y python3 acl e2fsprogs util-linux" }
+          - { name: arch, image: archlinux:latest, install: "pacman -Sy --noconfirm python acl e2fsprogs util-linux" }
+    container:
+      image: ${{ matrix.distro.image }}
+    steps:
+      - name: Install packages
+        run: ${{ matrix.distro.install }}
+      - uses: actions/checkout@v4
+      - name: Report the environment under test
+        run: |
+          python3 --version
+          uname -a
+          cat /etc/os-release | head -3
+      - name: Run the kernel-facing integration tests as root
+        run: python3 -m unittest discover -s tests -p "test_linux_integration.py" -v
+
+  lint:
+    name: lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install linters
+        run: python -m pip install --upgrade pip ruff mypy pyyaml
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format check
+        run: ruff format --check .
+      - name: mypy
+        run: mypy
+      - name: Validate workflows, issue templates and the devcontainer
+        run: python scripts/check_configs.py
+
+  package:
+    name: build and install the wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Install the wheel and run it
+        run: |
+          python -m pip install dist/*.whl
+          why --version
+          why layers
+          why denied /etc/shadow --no-color || true
+          why denied /etc/shadow --json > /tmp/report.json || true
+          python -c "import json;d=json.load(open('/tmp/report.json'));assert len(d['layers'])==12;print('layers:', len(d['layers']), 'verdict:', d['verdict'])"
+      - name: Exit-code contract
+        run: |
+          set +e
+          why denied /etc/shadow --check; root_code=$?
+          why denied /etc/shadow --check --user nobody; nobody_code=$?
+          why denied /nonexistent/for/sure --check --user nobody; absent_code=$?
+          set -e
+          echo "root=$root_code nobody=$nobody_code absent=$absent_code"
+          test "$root_code" -eq 0      # root may read /etc/shadow
+          test "$nobody_code" -eq 1    # nobody may not
+          test "$absent_code" -eq 1    # a missing path fails closed
+      - name: The tool must never modify the system
+        run: |
+          before=$(stat -c '%a %u %g' /etc/shadow)
+          why denied /etc/shadow --no-color > /dev/null || true
+          after=$(stat -c '%a %u %g' /etc/shadow)
+          echo "$before -> $after"
+          test "$before" = "$after"
+      - name: The sdist must be self-sufficient
+        run: |
+          # It ships the test suite, so it has to be able to run it (this caught a
+          # MANIFEST.in bug that dropped tests/support.py from the sdist).
+          mkdir -p /tmp/sdist-check
+          tar xzf dist/*.tar.gz -C /tmp/sdist-check
+          cd /tmp/sdist-check/why_linux-*/
+          python -m unittest discover -s tests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*

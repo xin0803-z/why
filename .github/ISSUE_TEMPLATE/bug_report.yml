@@ -1,0 +1,94 @@
+name: Bug report
+description: Something is wrong — a wrong verdict, a crash, or a bad fix suggestion
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The fastest path to a fix is the JSON report
+        below — it contains everything `why` saw.
+  - type: textarea
+    id: report
+    attributes:
+      label: why report
+      description: "Run: `why denied /the/path --json --verbose` and paste the output."
+      render: json
+      placeholder: |
+        {
+          "tool": "why",
+          "version": "0.1.0",
+          ...
+        }
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The exact command
+      placeholder: why denied /srv/data --op write --user www-data
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected the verdict to be, and why
+      description: If you know the real answer already (from `strace`, an audit log, trial and error), say how you know.
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and kernel
+      placeholder: Ubuntu 24.04, Linux 6.8.0-45-generic
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "`why --version`"
+      placeholder: why 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: container
+    attributes:
+      label: Is the denial inside a container or sandbox?
+      options:
+        - "No, plain host"
+        - Docker
+        - Podman (rootless)
+        - systemd-nspawn / systemd sandboxing
+        - Flatpak / Snap
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: filesystem
+    attributes:
+      label: Filesystem of the target
+      description: "`findmnt -T /the/path` — ext4, xfs, btrfs, NFS, CIFS, FUSE, tmpfs…"
+      placeholder: ext4
+    validations:
+      required: false
+  - type: dropdown
+    id: mac
+    attributes:
+      label: MAC status
+      options:
+        - Neither SELinux nor AppArmor
+        - SELinux enforcing
+        - SELinux permissive
+        - AppArmor enabled
+        - Not sure
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I ran `why layers` and the layer shown as deciding is the wrong one (or none is)
+          required: false
+        - label: I redacted anything sensitive from the pasted report
+          required: true

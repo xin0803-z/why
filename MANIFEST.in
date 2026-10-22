@@ -1,0 +1,20 @@
+# Everything a user of the sdist needs in order to run the test suite and read the
+# docs. setuptools only picks up `test*.py` automatically, which would leave out
+# tests/support.py — the shared fixtures the whole suite imports.
+include LICENSE
+include README.md
+include README.zh-CN.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include PUBLISHING.md
+include .gitattributes
+
+recursive-include src/why py.typed
+recursive-include tests *.py
+recursive-include docs *.md *.png
+recursive-include scripts *.py *.sh
+recursive-include .github *.yml *.yaml *.md
+recursive-include .devcontainer *.json
+
+exclude .gitignore
+global-exclude *.py[cod] __pycache__

@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "why-linux"
+version = "0.1.0"
+description = "Explain Linux access denials layer by layer: why am I getting Permission denied?"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "why contributors" }]
+keywords = ["linux", "permissions", "troubleshooting", "cli", "sysadmin", "acl", "selinux", "devops"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Systems Administration",
+  "Topic :: Utilities",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/xin0803-z/why"
+Issues = "https://github.com/xin0803-z/why/issues"
+Changelog = "https://github.com/xin0803-z/why/blob/main/CHANGELOG.md"
+
+[project.scripts]
+why = "why.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+why = ["py.typed"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.mypy]
+files = ["src/why"]
+# mypy dropped its Python 3.9 target, so 3.10 is the oldest version it can check.
+# The 3.9 runtime support is verified by the unit matrix in CI instead.
+python_version = "3.10"
+# `os.getxattr`, `os.ioctl`, `pwd` and `grp` only exist in the POSIX typeshed
+# stubs; without this, mypy reports false positives when run on Windows/macOS.
+platform = "linux"
+ignore_missing_imports = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+  # The code is annotated with `from __future__ import annotations` everywhere and
+  # still supports Python 3.9 (RHEL 9 ships 3.9), so both styles are acceptable.
+  "UP006",
+  "UP007",
+  "UP035",
+  "UP045",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The tests bootstrap sys.path before importing the package under test.
+"tests/*" = ["B011", "E402"]
+# The demo-image script has long argv-style string literals on purpose.
+"scripts/*" = ["E501"]

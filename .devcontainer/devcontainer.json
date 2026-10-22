@@ -1,0 +1,23 @@
+{
+  "name": "why (Linux, root)",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  "features": {},
+  "containerUser": "root",
+  "remoteUser": "root",
+  "postCreateCommand": "apt-get update && apt-get install -y --no-install-recommends acl attr e2fsprogs util-linux auditd apparmor-utils libcap2-bin && python -m pip install --upgrade pip ruff && python -m pip install -e .",
+  "customizations": {
+    "vscode": {
+      "extensions": ["charliermarsh.ruff", "ms-python.python"],
+      "settings": {
+        "python.testing.unittestEnabled": true,
+        "python.testing.unittestArgs": ["-v", "-s", "tests", "-p", "test_*.py"],
+        "python.testing.pytestEnabled": false,
+        "editor.formatOnSave": true,
+        "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" }
+      }
+    }
+  },
+  "postStartCommand": "python -m unittest discover -s tests",
+  "hostRequirements": { "cpus": 2 },
+  "remoteEnv": { "PYTHONPATH": "${containerWorkspaceFolder}/src" }
+}

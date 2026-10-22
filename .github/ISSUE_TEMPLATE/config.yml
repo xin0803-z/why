@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: How the 12 layers work
+    url: https://github.com/xin0803-z/why/blob/main/docs/LAYERS.md
+    about: Read this before filing — it explains what can and cannot be decided from user space.
+  - name: Question or idea (Discussions)
+    url: https://github.com/xin0803-z/why/discussions
+    about: For open-ended questions, "is this a bug?", or show-and-tell.
+  - name: Security issue
+    url: https://github.com/xin0803-z/why/security/advisories/new
+    about: Please report privately rather than in a public issue.
