@@ -98,15 +98,23 @@ jobs:
           python -c "import json;d=json.load(open('/tmp/report.json'));assert len(d['layers'])==12;print('layers:', len(d['layers']), 'verdict:', d['verdict'])"
       - name: Exit-code contract
         run: |
+          # This job runs as the unprivileged runner user, so the expectations must not
+          # assume root: the "allowed" case therefore uses a file this user owns (and
+          # the "denied" case pins the subject with --user, which is root-independent).
+          touch /tmp/why-contract.txt
           set +e
-          why denied /etc/shadow --check; root_code=$?
-          why denied /etc/shadow --check --user nobody; nobody_code=$?
+          why denied /tmp/why-contract.txt --check; allowed_code=$?
+          why denied /etc/shadow --check --user nobody; denied_code=$?
           why denied /nonexistent/for/sure --check --user nobody; absent_code=$?
+          why denied /tmp/why-contract.txt > /dev/null; open_allowed_code=$?
+          why denied /etc/shadow --user nobody > /dev/null; open_denied_code=$?
           set -e
-          echo "root=$root_code nobody=$nobody_code absent=$absent_code"
-          test "$root_code" -eq 0      # root may read /etc/shadow
-          test "$nobody_code" -eq 1    # nobody may not
-          test "$absent_code" -eq 1    # a missing path fails closed
+          echo "allowed=$allowed_code denied=$denied_code absent=$absent_code open_allowed=$open_allowed_code open_denied=$open_denied_code"
+          test "$allowed_code" -eq 0        # allowed, and --check says so
+          test "$denied_code" -eq 1         # denied, and --check fails closed
+          test "$absent_code" -eq 1         # a missing path fails closed too
+          test "$open_allowed_code" -eq 10  # allowed without --check is EXIT_ALLOWED
+          test "$open_denied_code" -eq 0    # denied without --check is EXIT_EXPLAINED_DENIED
       - name: The tool must never modify the system
         run: |
           before=$(stat -c '%a %u %g' /etc/shadow)
