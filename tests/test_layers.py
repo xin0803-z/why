@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -12,8 +13,19 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import support  # noqa: E402
 
-from why.checks import LAYER_META, dac_layers, system_layers  # noqa: E402
+from why.checks import LAYER_META, dac_layers, run_all, system_layers  # noqa: E402
 from why.model import Op, Status  # noqa: E402
+
+
+def only_these_paths_exist(*paths: str):
+    """Pretend exactly these POSIX paths exist, whatever the host filesystem says.
+
+    ``first_missing_component`` stats the components it walks, so a fixture built on
+    ``/srv/...`` is meaningless on a developer's Windows machine unless the stat is
+    faked. The layer under test is the only thing being lied to.
+    """
+    present = set(paths)
+    return mock.patch("os.path.lexists", side_effect=lambda path: path in present)
 
 
 class ExistsLayerTests(unittest.TestCase):
@@ -37,6 +49,78 @@ class ExistsLayerTests(unittest.TestCase):
         result = dac_layers.layer_exists(ctx, 1)
         self.assertIs(result.status, Status.OK)
         self.assertIn("0640", result.detail)
+
+    def test_create_with_an_existing_parent_is_not_enoent(self):
+        # Regression: creating an entry means the target is expected to be absent, so
+        # the exists layer must not report ENOENT for the target itself. A red CI run
+        # on every distro was this bug - five integration tests all landing on 'exists'.
+        ctx = support.make_ctx(
+            target=support.make_target("/srv/readonly/new.txt", exists=False),
+            op=Op.CREATE,
+        )
+        with only_these_paths_exist("/", "/srv", "/srv/readonly"):
+            result = dac_layers.layer_exists(ctx, 1)
+        self.assertIs(result.status, Status.OK)
+        self.assertIn("creation is possible", result.detail)
+
+    def test_create_with_a_missing_ancestor_is_enoent(self):
+        ctx = support.make_ctx(
+            target=support.make_target(
+                "/srv/gone/sub/new.txt",
+                exists=False,
+                ancestors=[("/", 0o755, 0, 0), ("/srv", 0o755, 0, 0)],
+            ),
+            op=Op.CREATE,
+        )
+        with only_these_paths_exist("/", "/srv"):
+            result = dac_layers.layer_exists(ctx, 1)
+        self.assertIs(result.status, Status.DENY)
+        self.assertIn("ENOENT", result.detail)
+        self.assertIn("/srv/gone", result.detail)
+
+    def test_first_missing_component_can_skip_the_target(self):
+        ctx = support.make_ctx(
+            target=support.make_target("/srv/readonly/new.txt", exists=False),
+            op=Op.CREATE,
+        )
+        with only_these_paths_exist("/", "/srv", "/srv/readonly"):
+            self.assertEqual(dac_layers.first_missing_component(ctx), "/srv/readonly/new.txt")
+            self.assertIsNone(dac_layers.first_missing_component(ctx, include_target=False))
+
+
+class CreateAttributionTests(unittest.TestCase):
+    """Creating an entry must be attributed to the parent directory."""
+
+    def test_read_only_parent_denies_at_the_mode_layer(self):
+        target = support.make_target(
+            "/srv/readonly/new.txt",
+            exists=False,
+            ancestors=[("/", 0o755, 0, 0), ("/srv", 0o755, 0, 0), ("/srv/readonly", 0o555, 0, 0)],
+        )
+        subject = support.make_subject(uid=65534, gid=65534, groups=(65534,))
+        with only_these_paths_exist("/", "/srv", "/srv/readonly"):
+            report = run_all(target, subject, Op.CREATE, env=support.make_env(), gather_evidence=False)
+        self.assertEqual(report.deciding_layer, "mode")
+        self.assertEqual(report.verdict.value, "denied")
+        self.assertIn("/srv/readonly", report.reason)
+
+    def test_writable_parent_is_not_denied(self):
+        # The parent directory is world-writable, so DAC allows the creation. The
+        # verdict here is 'unknown' rather than 'allowed' only because this test runs
+        # on a non-Linux host, where the mount and attribute layers cannot be
+        # established for a synthetic path; test_create_in_a_writable_directory in
+        # test_linux_integration.py pins the 'allowed' verdict on a real filesystem.
+        target = support.make_target(
+            "/srv/open/new.txt",
+            exists=False,
+            ancestors=[("/", 0o755, 0, 0), ("/srv", 0o755, 0, 0), ("/srv/open", 0o777, 0, 0)],
+        )
+        subject = support.make_subject(uid=65534, gid=65534, groups=(65534,))
+        with only_these_paths_exist("/", "/srv", "/srv/open"):
+            report = run_all(target, subject, Op.CREATE, env=support.make_env(), gather_evidence=False)
+        self.assertIs(report.layer("mode").status, Status.OK)
+        self.assertNotEqual(report.verdict.value, "denied")
+        self.assertIsNot(report.layer("exists").status, Status.DENY)
 
 
 class ModeLayerTests(unittest.TestCase):

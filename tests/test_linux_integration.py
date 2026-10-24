@@ -175,6 +175,17 @@ class LinuxIntegrationTests(unittest.TestCase):
         report = self.verdict_for(path, Op.CREATE)
         self.assertEqual(report.deciding_layer, "mode")
 
+    def test_create_in_a_writable_directory(self):
+        """The positive case for --op create: nothing denies it, on a real filesystem."""
+        writable = os.path.join(self.dir, "writable")
+        os.makedirs(writable, exist_ok=True)
+        os.chmod(writable, 0o777)
+        os.chown(writable, 0, 0)
+        report = self.verdict_for(os.path.join(writable, "fresh.txt"), Op.CREATE)
+        self.assertEqual(self.status_of(report, "exists"), Status.OK)
+        self.assertEqual(self.status_of(report, "mode"), Status.OK)
+        self.assertEqual(report.verdict.value, "allowed")
+
     def test_noexec_mount_is_reported_when_available(self):
         """Bind-mount a tmpfs noexec over a scratch dir, if the kernel lets us."""
         scratch = os.path.join(self.dir, "noexec")

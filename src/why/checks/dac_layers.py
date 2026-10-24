@@ -28,12 +28,18 @@ def _stat_path(ctx: CheckContext, path: str) -> str:
     return (prefix + path) if prefix else path
 
 
-def first_missing_component(ctx: CheckContext) -> Optional[str]:
-    """The deepest path component that does not exist, for a clean ENOENT story."""
-    path = ctx.target.path
-    parts = [p for p in path.split("/") if p]
+def first_missing_component(ctx: CheckContext, include_target: bool = True) -> Optional[str]:
+    """The deepest path component that does not exist, for a clean ENOENT story.
+
+    ``include_target=False`` inspects the ancestors only. Creating an entry needs
+    that: for ``--op create`` the target is *expected* to be absent, so counting it
+    as a missing component would report ENOENT for every creation attempt instead of
+    letting the mode layer decide on the parent directory's ``w+x``.
+    """
+    parts = [p for p in ctx.target.path.split("/") if p]
+    chain = parts if include_target else parts[:-1]
     current = ""
-    for part in parts:
+    for part in chain:
         current = f"{current}/{part}"
         try:
             if not os.path.lexists(_stat_path(ctx, current)):
@@ -102,7 +108,7 @@ def layer_exists(ctx: CheckContext, index: int) -> LayerResult:
                 ),
                 fix="pick another name, or use --op write to test writing the existing entry",
             )
-        missing = first_missing_component(ctx)
+        missing = first_missing_component(ctx, include_target=False)
         if missing:
             return LayerResult(
                 id="exists",
