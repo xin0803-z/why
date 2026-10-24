@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "why-linux"
-version = "0.1.0"
+# The version lives in src/why/__init__.py and nowhere else: a second copy in this
+# file is how `why --version` ended up reporting 0.1.0 from a 0.1.1 wheel.
+dynamic = ["version"]
 description = "Explain Linux access denials layer by layer: why am I getting Permission denied?"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -45,6 +47,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 why = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = { attr = "why.__version__" }
 
 [tool.ruff]
 line-length = 120

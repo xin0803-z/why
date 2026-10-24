@@ -8,6 +8,31 @@ All notable changes to this project are documented here. The format follows
 
 _Nothing yet._
 
+## [0.1.1] - 2026-10-24
+
+Fixes found by the first honest run of the Linux suite in CI (5 distro containers,
+`py3.9`–`py3.13`): the 0.1.0 sdist and wheel answer `--op create` incorrectly.
+
+### Fixed
+
+* `--op create` no longer reports `ENOENT` for the entry it is about to create. The
+  missing-component walk counted the target itself, so *every* creation attempt was
+  attributed to the `exists` layer and the parent directory's `w+x` was never
+  consulted. It now walks the ancestors only, while a missing read target still names
+  itself.
+* The root-only integration suite created its scratch directory with `mkdtemp` (0700
+  `root:root`) and explained access as an unprivileged user, so the traversal layer
+  denied first and five tests never reached the object under test. The fixture now
+  makes the scratch directory traversable.
+* CI: the exit-code contract no longer assumes the runner is root; the allowed case
+  uses a file the runner user owns, and `EXIT_ALLOWED` (10) and
+  `EXIT_EXPLAINED_DENIED` (0) are pinned as well.
+
+### Added
+
+* End-to-end `--op create` tests that drive the whole layer pipeline, plus a Linux
+  integration test for the positive case (creation in a writable directory).
+
 ## [0.1.0] - 2026-10-22
 
 First release: `why denied`.
@@ -41,5 +66,6 @@ First release: `why denied`.
 * `docs/LAYERS.md` — the kernel behaviour behind each layer.
 * `scripts/make_demo.py` — regenerates the README screenshot from the real renderer.
 
-[Unreleased]: https://github.com/xin0803-z/why/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/xin0803-z/why/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/xin0803-z/why/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/xin0803-z/why/releases/tag/v0.1.0

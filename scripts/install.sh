@@ -2,7 +2,7 @@
 # Install `why` without the ceremony.
 #
 #   curl -fsSL https://raw.githubusercontent.com/xin0803-z/why/main/scripts/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --version 0.1.0
+#   curl -fsSL .../install.sh | bash -s -- --version 0.1.1
 #   curl -fsSL .../install.sh | bash -s -- --method pip --prefix "$HOME/.local"
 #
 # It prefers pipx, then uv, then `pip install --user`. It never uses sudo and never
