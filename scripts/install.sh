@@ -6,10 +6,12 @@
 #   curl -fsSL .../install.sh | bash -s -- --method pip --prefix "$HOME/.local"
 #
 # It prefers pipx, then uv, then `pip install --user`. It never uses sudo and never
-# touches system Python.
+# touches system Python. There is no index to trust: the wheel is fetched from this
+# project's GitHub release (the fallback to PyPI only matters once it is published).
 set -euo pipefail
 
 PACKAGE="why-linux"
+REPO="${WHY_REPO:-xin0803-z/why}"
 VERSION=""
 METHOD="auto"
 PREFIX="${HOME}/.local"
@@ -22,11 +24,15 @@ Install why (the `why-linux` distribution).
 Usage: install.sh [options]
 
 Options:
-  --version VERSION   Install a specific version (default: latest)
+  --version VERSION   Install a specific version (default: latest release)
   --method METHOD     auto | pipx | uv | pip   (default: auto)
-  --prefix DIR        Installation prefix for the pip method (default: ~/.local)
+  --prefix DIR        Where pip puts it (default: ~/.local); pipx/uv put their
+                      launcher in DIR/bin
   --dry-run           Print what would happen, change nothing
   -h, --help          This message
+
+Environment:
+  WHY_REPO            GitHub owner/repo to download from (default: xin0803-z/why)
 EOF
 }
 
@@ -49,8 +55,6 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$VERSION" ] || VERSION="latest"
-SPEC="${PACKAGE}"
-[ "$VERSION" = "latest" ] || SPEC="${PACKAGE}==${VERSION}"
 
 # ---------------------------------------------------------------- sanity checks
 
@@ -80,6 +84,84 @@ run() {
 
 has() { command -v "$1" >/dev/null 2>&1; }
 
+# ---------------------------------------------------------------- artifact source
+# The package is not on PyPI yet, so the artifact comes from the GitHub release: the
+# API names the tag, and the wheel name follows from it. Anything that downloads is
+# done with curl when it exists and with the standard library otherwise, so the
+# installer needs nothing beyond Python and a shell.
+
+BASE="https://github.com/${REPO}"
+API="https://api.github.com/repos/${REPO}"
+
+api_tag() {
+    if [ "$VERSION" = "latest" ]; then
+        url="${API}/releases/latest"
+    else
+        url="${API}/releases/tags/v${VERSION}"
+    fi
+    if has curl; then
+        curl -fsSL "$url" 2>/dev/null |
+            sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+    else
+        "$PY" - "$url" <<'PYEOF' 2>/dev/null || true
+import json, sys, urllib.request
+try:
+    with urllib.request.urlopen(sys.argv[1], timeout=20) as response:
+        print(json.load(response).get("tag_name", ""))
+except Exception:
+    pass
+PYEOF
+    fi
+}
+
+fetch() {
+    if has curl; then
+        curl -fsSL -o "$2" "$1"
+    else
+        "$PY" -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$1" "$2"
+    fi
+}
+
+index_spec() {
+    if [ "$VERSION" = "latest" ]; then printf '%s' "$PACKAGE"; else printf '%s==%s' "$PACKAGE" "$VERSION"; fi
+}
+
+tmpdir=""
+# Must not return non-zero: a failing command in the EXIT trap would become the
+# script's exit status (a --dry-run run sets no tmpdir and exited 1 because of it).
+cleanup() {
+    if [ -n "$tmpdir" ]; then
+        rm -rf "$tmpdir"
+    fi
+    return 0
+}
+trap cleanup EXIT INT TERM
+
+SPEC=""
+tag="$(api_tag || true)"
+if [ -n "$tag" ]; then
+    url="${BASE}/releases/download/${tag}/why_linux-${tag#v}-py3-none-any.whl"
+    log "Release ${tag}"
+    if [ "$DRY_RUN" = "1" ]; then
+        printf '    [dry-run] download %s\n' "$url"
+        SPEC="$url"
+    else
+        tmpdir="$(mktemp -d)"
+        wheel="${tmpdir}/why_linux-${tag#v}-py3-none-any.whl"
+        if fetch "$url" "$wheel"; then
+            SPEC="$wheel"
+        else
+            warn "could not download $url"
+            warn "falling back to the package index"
+            SPEC="$(index_spec)"
+        fi
+    fi
+else
+    warn "no release found for ${REPO} (offline, rate-limited, or no releases yet)"
+    warn "falling back to the package index"
+    SPEC="$(index_spec)"
+fi
+
 # ---------------------------------------------------------------- installation
 
 installed_with=""
@@ -94,21 +176,23 @@ case "$METHOD" in
     pipx)
         has pipx || die "pipx not found. Install it, or use --method pip."
         log "pipx install $SPEC"
-        run pipx install "$SPEC" --force
+        run env PIPX_BIN_DIR="${PREFIX}/bin" pipx install "$SPEC" --force
         installed_with="pipx"
         ;;
     uv)
         has uv || die "uv not found. Install it, or use --method pip."
         log "uv tool install $SPEC"
-        run uv tool install "$SPEC" --force
+        run env UV_TOOL_BIN_DIR="${PREFIX}/bin" uv tool install "$SPEC" --force
         installed_with="uv"
         ;;
     pip)
-        log "pip install --user $SPEC  (prefix: $PREFIX)"
+        # PYTHONUSERBASE is what makes --prefix mean something: pip writes the package
+        # into $PREFIX/lib/pythonX.Y/site-packages and the `why` script into $PREFIX/bin.
+        log "pip install --user $SPEC  (PYTHONUSERBASE=$PREFIX)"
         if [ "$DRY_RUN" = "1" ]; then
-            printf '    [dry-run] %s -m pip install --user --upgrade %s\n' "$PY" "$SPEC"
+            printf '    [dry-run] PYTHONUSERBASE=%s %s -m pip install --user --upgrade %s\n' "$PREFIX" "$PY" "$SPEC"
         else
-            "$PY" -m pip install --user --upgrade "$SPEC"
+            PYTHONUSERBASE="$PREFIX" "$PY" -m pip install --user --upgrade "$SPEC"
         fi
         installed_with="pip"
         ;;
@@ -122,17 +206,42 @@ if [ "$DRY_RUN" = "1" ]; then
     exit 0
 fi
 
+# Where this Python puts packages relative to a prefix ("lib/pythonX.Y/site-packages"
+# on Linux, "Lib/site-packages" on Windows). The launcher itself is located by search
+# rather than by guessing: pip nests it differently on some platforms.
+purelibdir="$("$PY" -c 'import sysconfig; print(sysconfig.get_path("purelib", vars={"base": "", "platbase": ""}))')"
+
+installed_as=""
+launcher=""
 if command -v why >/dev/null 2>&1; then
-    log "Installed: $(why --version)"
+    installed_as="$(why --version)"
 else
-    warn "The \`why\` command is not on your PATH yet."
-    case "$installed_with" in
-        pip)
-            warn "Add pip's user bin directory, then restart your shell:"
-            warn "  export PATH=\"\$($PY -m site --user-base)/bin:\$PATH\""
-            ;;
-        *) warn "Restart your shell so the tool directory is picked up." ;;
-    esac
+    launcher="$(find "$PREFIX" -maxdepth 4 \( -type f -o -type l \) \( -name why -o -name why.exe \) 2>/dev/null | head -n 1)"
+    if [ -n "$launcher" ]; then
+        # Prove the installed command actually runs before claiming success: with a
+        # custom --prefix the package may not be on the interpreter's default path yet.
+        if version="$(PYTHONPATH="${PREFIX}/${purelibdir}${PYTHONPATH:+:$PYTHONPATH}" "$launcher" --version 2>/dev/null)" && [ -n "$version" ]; then
+            installed_as="${version} (${launcher}, not on PATH yet)"
+        elif version="$("$launcher" --version 2>/dev/null)" && [ -n "$version" ]; then
+            installed_as="${version} (${launcher}, not on PATH yet)"
+        fi
+    fi
+fi
+
+if [ -n "$installed_as" ]; then
+    log "Installed: ${installed_as}"
+else
+    warn "The \`why\` command is not on your PATH yet, and no launcher was found under ${PREFIX}."
+    warn "Check the pip output above for where it went."
+fi
+
+if [ -n "$launcher" ] && ! command -v why >/dev/null 2>&1; then
+    warn "To use it from your shell:"
+    warn "  export PATH=\"$(dirname "$launcher"):\$PATH\""
+    if [ "$installed_with" = "pip" ] && [ "$PREFIX" != "${HOME}/.local" ]; then
+        warn "A custom --prefix is outside Python's default path, so in that shell also:"
+        warn "  export PYTHONPATH=\"${PREFIX}/${purelibdir}\${PYTHONPATH:+:\$PYTHONPATH}\""
+    fi
 fi
 
 cat <<'EOF'

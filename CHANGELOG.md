@@ -6,7 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+* `scripts/install.sh` installs from this project's GitHub release instead of PyPI:
+  `why-linux` is not published there yet, so every method the installer offered failed.
+  It resolves the release tag, downloads the wheel, and hands the file to pipx, uv or pip,
+  keeping the index as the fallback for the day it is published. `--prefix` is honoured (it
+  used to be printed but ignored), `--dry-run` no longer exits 1, and the script now runs
+  the installed command before claiming success.
+* Both READMEs no longer tell you to `pip install why-linux`; they point at the installer and
+  the release assets, and say plainly that the index is not the route yet.
+
+### Added
+
+* `tests/test_packaging.py` — the version has one source of truth, the changelog keeps up
+  with it, and a documented install route has to exist.
+* CI installs the published release wheel through `scripts/install.sh` into a clean prefix,
+  then checks that the installed command runs.
 
 ## [0.1.1] - 2026-10-24
 

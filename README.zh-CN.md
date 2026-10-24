@@ -28,12 +28,15 @@ fix     sudo setfacl -m u:1000:r-- /etc/shadow   # 只授权给 uid 1000
 
 ## 安装
 
+两种方式都直接来自本仓库（**目前还没发布到 PyPI**）：
+
 ```bash
-pipx install why-linux      # 推荐，装完就有 why 命令
-# 或者
-uv tool install why-linux
-# 或者
-pip install --user why-linux
+# 1. 安装脚本：从 Release 下载 wheel，再交给 pipx / uv / pip
+curl -fsSL https://raw.githubusercontent.com/xin0803-z/why/main/scripts/install.sh | bash
+
+# 2. 或者自己取 wheel，看清楚装的是什么
+#    https://github.com/xin0803-z/why/releases/latest
+pip install --user ./why_linux-<版本>-py3-none-any.whl
 ```
 
 从源码装（除标准库外零依赖）：
@@ -43,7 +46,10 @@ git clone https://github.com/xin0803-z/why && cd why
 pipx install .
 ```
 
-> PyPI 上叫 `why-linux`（`why` 已被占用），命令仍然是 `why`。需要 Python 3.9+（RHEL 9 自带的 3.9 就能跑）。
+> PyPI 上叫 `why-linux`（`why` 已被占用），命令始终是 `why`。等它发布到 PyPI 之后
+> `pipx install why-linux` 这类命令同样可用；在那之前请用上面的安装脚本或 Release 里的 wheel。
+> `scripts/install.sh --dry-run` 会把要执行的每条命令先打印出来。
+> 需要 Python 3.9+（RHEL 9 自带的 3.9 就能跑）。
 
 **零运行时依赖，全程只读**：`why` 不会修改任何权限、标签或文件，只打印你可以执行的命令。
 

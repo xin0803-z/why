@@ -29,12 +29,15 @@ fix     sudo setfacl -m u:1000:r-- /etc/shadow   # grants only uid 1000
 
 ## Install
 
+Two ways, both straight from this repository (the distribution is **not on PyPI yet**):
+
 ```bash
-pipx install why-linux      # recommended: gives you the `why` command
-# or
-uv tool install why-linux
-# or
-pip install --user why-linux
+# 1. the installer - fetches the release wheel, then hands it to pipx, uv or pip
+curl -fsSL https://raw.githubusercontent.com/xin0803-z/why/main/scripts/install.sh | bash
+
+# 2. or take the wheel yourself, so you can see exactly what you are installing
+#    https://github.com/xin0803-z/why/releases/latest
+pip install --user ./why_linux-<version>-py3-none-any.whl
 ```
 
 From source (no dependencies beyond the standard library):
@@ -44,7 +47,10 @@ git clone https://github.com/xin0803-z/why && cd why
 pipx install .
 ```
 
-> The distribution is named `why-linux` because `why` was taken on PyPI; the command is `why`.
+> The distribution is named `why-linux` because `why` was taken on PyPI; the command is always `why`.
+> `pipx install why-linux` and friends will work the moment it is published there — until then the
+> installer and the release wheel above are the supported routes, and `scripts/install.sh --dry-run`
+> shows every command it would run.
 
 Requires Python 3.9+ (RHEL 9's Python is fine). **Zero runtime dependencies.** Runs read-only: `why` never changes a permission, a label or a file — it only prints the commands you could run.
 

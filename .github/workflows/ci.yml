@@ -130,6 +130,21 @@ jobs:
           tar xzf dist/*.tar.gz -C /tmp/sdist-check
           cd /tmp/sdist-check/why_linux-*/
           python -m unittest discover -s tests
+      - name: The installer must work from a clean prefix
+        run: |
+          # The installer downloads the wheel from the published release, so this also
+          # proves the artifact other people get is installable. --dry-run first, to show
+          # what it would do without doing it.
+          bash scripts/install.sh --dry-run
+          bash scripts/install.sh --method pip --prefix "$HOME/.local"
+          export PATH="$HOME/.local/bin:$PATH"
+          why --version
+          why layers > /dev/null
+          set +e
+          why denied /etc/shadow --check; code=$?
+          set -e
+          test "$code" -eq 1              # unprivileged, denied, fails closed
+          test -z "$(git status --porcelain)"   # installing did not touch the tree
       - uses: actions/upload-artifact@v4
         with:
           name: dist
